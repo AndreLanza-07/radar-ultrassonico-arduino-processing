@@ -1,0 +1,232 @@
+import processing.serial.*;
+
+Serial myPort;
+
+// ===== CONFIGURACOES DO RADAR =====
+int iAngle = 90;
+int iDistance = 0;
+
+String noObject = "Aguardando sensor";
+String serialData = "";
+
+PFont orcFont;
+
+// Alcance maximo do radar em centimetros
+final int MAX_DISTANCE = 40;
+
+// Escala visual do radar em pixels
+float radarRadius;
+
+// Historico dos objetos detectados
+int[] lastAngle = new int[181];
+int[] lastDistance = new int[181];
+boolean[] objectDetected = new boolean[181];
+
+void setup() {
+  size(1366, 768);
+  smooth();
+
+  orcFont = createFont("Arial", 22);
+  textFont(orcFont);
+
+  radarRadius = min(width * 0.43, height * 0.70);
+
+  // Lista as portas seriais disponiveis
+  println("Portas seriais disponiveis:");
+  printArray(Serial.list());
+
+  // ALTERE PARA A PORTA DO SEU ARDUINO  
+  String porta = "COM9";
+
+  try {
+    myPort = new Serial(this, porta, 9600);
+    myPort.clear();
+    myPort.bufferUntil('.');
+
+    println("Conectado a " + porta);
+  }
+  catch (Exception e) {
+    println("ERRO ao abrir a porta serial.");
+    println("Confira a porta do Arduino.");
+    println(e.getMessage());
+  }
+}
+
+void draw() {
+  background(0);
+
+  drawRadar();
+  drawObjects();
+  drawSweepLine();
+  drawInterface();
+}
+
+// Recebe dados no formato: angulo,distancia.
+void serialEvent(Serial port) {
+  String received = port.readStringUntil('.');
+
+  if (received == null) {
+    return;
+  }
+
+  received = trim(received);
+
+  // Remove o ponto final
+  received = received.replace(".", "");
+
+  String[] values = split(received, ',');
+
+  if (values.length != 2) {
+    return;
+  }
+
+  try {
+    int angle = int(trim(values[0]));
+    int distance = int(trim(values[1]));
+
+    if (angle >= 0 && angle <= 180 &&
+        distance >= 0 && distance <= 400) {
+
+      iAngle = angle;
+      iDistance = distance;
+
+      // Guarda objetos dentro do alcance
+      if (distance > 0 && distance <= MAX_DISTANCE) {
+        lastAngle[angle] = angle;
+        lastDistance[angle] = distance;
+        objectDetected[angle] = true;
+      } else {
+        objectDetected[angle] = false;
+      }
+
+    }
+  }
+  catch (Exception e) {
+    println("Leitura serial invalida: " + received);
+  }
+}
+
+void drawRadar() {
+  pushMatrix();
+
+  float centerX = width / 2.0;
+  float centerY = height * 0.88;
+
+  translate(centerX, centerY);
+
+  noFill();
+  stroke(0, 255, 0);
+  strokeWeight(2);
+
+  // Arcos de 10, 20, 30 e 40 cm
+  for (int cm = 10; cm <= MAX_DISTANCE; cm += 10) {
+    float r = map(cm, 0, MAX_DISTANCE, 0, radarRadius);
+    arc(0, 0, r * 2, r * 2, PI, TWO_PI);
+  }
+
+  // Linha horizontal
+  line(-radarRadius, 0, radarRadius, 0);
+
+  // Linhas angulares
+  for (int angle = 0; angle <= 180; angle += 30) {
+    float x = -radarRadius * cos(radians(angle));
+    float y = -radarRadius * sin(radians(angle));
+
+    line(0, 0, x, y);
+  }
+
+  popMatrix();
+}
+
+void drawSweepLine() {
+  pushMatrix();
+
+  translate(width / 2.0, height * 0.88);
+
+  float x = -radarRadius * cos(radians(iAngle));
+  float y = -radarRadius * sin(radians(iAngle));
+
+  stroke(0, 255, 0);
+  strokeWeight(4);
+
+  line(0, 0, x, y);
+
+  popMatrix();
+}
+
+void drawObjects() {
+  pushMatrix();
+
+  translate(width / 2.0, height * 0.88);
+
+  // Desenha os pontos detectados em vermelho
+  stroke(255, 0, 0);
+  strokeWeight(10);
+
+  for (int angle = 0; angle <= 180; angle++) {
+    if (objectDetected[angle]) {
+      float r = map(lastDistance[angle],
+                    0, MAX_DISTANCE, 0, radarRadius);
+
+      float x = -r * cos(radians(angle));
+      float y = -r * sin(radians(angle));
+
+      point(x, y);
+    }
+  }
+
+  popMatrix();
+}
+
+void drawInterface() {
+  fill(0, 255, 0);
+  noStroke();
+
+  textSize(26);
+  text("RADAR ULTRASSONICO", 25, 35);
+
+  textSize(20);
+
+  text("Angulo: " + iAngle + " graus",
+       25, height - 65);
+
+  if (iDistance > 0) {
+    text("Distancia: " + iDistance + " cm",
+         25, height - 35);
+  } else {
+    text("Distancia: Sem eco",
+         25, height - 35);
+  }
+
+  if (iDistance > 0 && iDistance <= MAX_DISTANCE) {
+    noObject = "Objeto detectado";
+  } else {
+    noObject = "Nenhum objeto dentro de 40 cm";
+  }
+
+  text(noObject, 350, height - 35);
+
+  // Marcacoes das distancias
+  textSize(18);
+
+  for (int cm = 10; cm <= MAX_DISTANCE; cm += 10) {
+    float r = map(cm, 0, MAX_DISTANCE, 0, radarRadius);
+
+    text(cm + " cm",
+         width / 2.0 + 8,
+         height * 0.88 - r + 20);
+  }
+
+  // Marcacoes angulares
+  for (int angle = 30; angle <= 150; angle += 30) {
+    float r = radarRadius * 0.90;
+
+    float x = width / 2.0 - r * cos(radians(angle));
+    float y = height * 0.88 - r * sin(radians(angle));
+
+    textAlign(CENTER, CENTER);
+    text(angle + " graus", x, y);
+  }
+
+  textAlign(LEFT, BASELINE);
+}
