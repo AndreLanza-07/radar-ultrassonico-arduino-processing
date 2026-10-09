@@ -1,0 +1,81 @@
+#include <Servo.h>
+
+// Pinos do sensor ultrassonico
+const int trigPin = 10;
+const int echoPin = 11;
+
+// Pino do servo motor
+const int servoPin = 12;
+
+// Variaveis
+Servo myServo;
+long duration;
+int distance;
+
+// Funcao para medir a distancia
+int calculateDistance() {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  // Mede o tempo de retorno do eco
+  duration = pulseIn(echoPin, HIGH, 30000);
+
+  // Se nao receber eco, retorna zero
+  if (duration == 0) {
+    return 0;
+  }
+
+  // Converte o tempo em distancia em centimetros
+  distance = duration * 0.0343 / 2;
+
+  return distance;
+}
+
+// Envia angulo e distancia para o Processing
+void sendData(int angle, int dist){
+  Serial.print(angle);
+  Serial.print(",");
+  Serial.print(dist);
+  Serial.print(".");
+}
+
+void setup() {
+  // Configura os pinos do sensor
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+
+  // Inicia comunicacao serial
+  Serial.begin(9600);
+
+  // Inicia o servo
+  myServo.attach(servoPin);
+  myServo.write(15);
+
+  delay(500);
+}
+
+void loop() {
+  // Movimento de 15 ate 165 graus
+  for (int angle = 15; angle <= 165; angle++) {
+    myServo.write(angle);
+    delay(30);
+
+    distance = calculateDistance();
+
+    sendData(angle, distance);
+  }
+
+  // Movimento de 165 ate 15 graus
+  for (int angle = 165; angle >= 15; angle--) {
+    myServo.write(angle);
+    delay(30);
+
+    distance = calculateDistance();
+
+    sendData(angle, distance);
+  }
+}
